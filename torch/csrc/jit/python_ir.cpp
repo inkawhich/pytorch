@@ -70,7 +70,7 @@ void initPythonIRBindings(PyObject * module_) {
       std::string cconv(inputs.size(), 't');
       func.attr("symbolic") = symbolic;
       Node* new_node = g.insertNode(g.createPythonOp(
-        THPObjectPtr(func.release().ptr()), cconv, {}, {}, false));
+        THPObjectPtr(func.release().ptr()), cconv, {}));
       for (auto i : inputs)
         new_node->addInput(i);
       std::vector<Value*> outputs;
@@ -106,6 +106,12 @@ void initPythonIRBindings(PyObject * module_) {
     })
     .def("create",[](Graph & g, const char * str, const std::vector<Value*> & inputs, size_t noutputs) {
       return g.create(Symbol::fromQualString(str),inputs, noutputs);
+    })
+    .def("param_node", [](Graph &g) {
+      return g.block()->param_node();
+    })
+    .def("return_node", [](Graph &g) {
+      return g.block()->return_node();
     })
     .GS(createConstant)
     .GS(createFusionGroup)
@@ -257,14 +263,14 @@ void initPythonIRBindings(PyObject * module_) {
       return variables;
     })
     .def("z_",[](Node & n, const char * name, at::Tensor v) {
-        return n.t_(Symbol::attr(name), v.view({}));
+        return n.t_(Symbol::attr(name), autograd::Variable(v.view({})).data());
     })
     .def("z",[](Node & n, const char * name) {
         return n.t(Symbol::attr(name));
     })
     .def("zs_",[](Node & n, const char * name, TensorsAttr::ValueType v) {
         for (size_t i = 0; i < v.size(); ++ i) {
-            v[i] = v[i].view({});
+            v[i] = autograd::Variable(v[i].view({})).data();
         }
         return n.ts_(Symbol::attr(name), std::move(v));
     })
@@ -334,9 +340,6 @@ void initPythonIRBindings(PyObject * module_) {
   .def_readonly("user",&Use::user)
   .def_readonly("offset",&Use::offset);
 
-  m.def("_jit_get_graph", [](tracer::TracingState* s) {
-    return s->graph;
-  });
   m.def("_jit_import_graph", [](const std::string& serialized_graph) {
     std::vector<at::Tensor> initializers;
     auto graph = ImportIRGraph(serialized_graph, initializers);
